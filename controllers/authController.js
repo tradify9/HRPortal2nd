@@ -1,6 +1,8 @@
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { generateEmployeeId } = require('../utils/generateEmployeeId');
 
 // Log to verify this file is loaded
 console.log('authController loaded');
@@ -53,12 +55,40 @@ exports.employeeLogin = async (req, res) => {
   const { email } = req.body;
 
   try {
-    const user = await User.findOne({ email }).lean();
+    let user = await User.findOne({ email }).lean();
     console.log('Employee Login: Fetched user from DB', { email, user });
 
     if (!user) {
-      console.log('Employee Login: User not found', { email });
-      return res.status(400).json({ msg: 'Invalid credentials' });
+      // Create a new user if not found
+      user = new User({
+        email,
+        role: 'employee',
+        name: 'Test Employee', // Default name
+      });
+      await user.save();
+      console.log('Employee Login: Created new user', { email });
+    }
+
+    // Ensure there's a corresponding Employee record
+    let employee = await Employee.findOne({ email }).lean();
+    if (!employee) {
+      const employeeId = await generateEmployeeId();
+      employee = new Employee({
+        employeeId,
+        name: user.name || 'Test Employee',
+        email,
+        position: 'Employee', // Default position
+        salary: 50000, // Default salary
+      });
+      await employee.save();
+      console.log('Employee Login: Created new employee record', { email, employeeId });
+
+      // Update User with employeeId if not present
+      await User.findOneAndUpdate(
+        { email },
+        { employeeId, name: employee.name },
+        { new: true }
+      );
     }
 
     const payload = {

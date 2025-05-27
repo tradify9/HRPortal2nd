@@ -38,6 +38,8 @@ exports.addEmployee = async (req, res) => {
     const user = new User({
       email,
       role: 'employee',
+      name, // Sync name with Employee collection
+      employeeId, // Sync employeeId with Employee collection
     });
 
     await employee.save();
@@ -109,6 +111,8 @@ exports.uploadEmployeesCSV = async (req, res) => {
           const user = new User({
             email,
             role: 'employee',
+            name, // Sync name with Employee collection
+            employeeId, // Sync employeeId with Employee collection
           });
 
           await employee.save();
@@ -215,6 +219,13 @@ exports.updateEmployee = async (req, res) => {
         console.log('Update Employee: Email already exists', { email });
         return res.status(400).json({ msg: 'Email already exists' });
       }
+
+      // Update the email in the User collection
+      await User.findOneAndUpdate(
+        { email: employee.email },
+        { email },
+        { new: true }
+      );
     }
 
     employee.name = name;
@@ -223,16 +234,6 @@ exports.updateEmployee = async (req, res) => {
     employee.salary = parseFloat(salary);
 
     await employee.save();
-
-    // Update the email in the User collection if it has changed
-    if (email !== employee.email) {
-      await User.findOneAndUpdate(
-        { email: employee.email },
-        { email },
-        { new: true }
-      );
-    }
-
     console.log('Update Employee: Success', { id: req.params.id, email: employee.email });
     res.json({ msg: 'Employee updated successfully', employee });
   } catch (error) {
@@ -247,13 +248,40 @@ exports.updateEmployee = async (req, res) => {
 exports.getCurrentEmployee = async (req, res) => {
   try {
     console.log('Get current employee: Attempting to fetch', { email: req.user.email });
-    const employee = await Employee.findOne({ email: req.user.email });
+    let employee = await Employee.findOne({ email: req.user.email }).lean();
+    
     if (!employee) {
-      console.log('Get current employee: Not found', { email: req.user.email });
-      return res.status(404).json({ msg: 'Employee not found' });
+      // If employee not found in Employee collection, check User collection
+      const user = await User.findOne({ email: req.user.email }).lean();
+      if (!user) {
+        console.log('Get current employee: User not found', { email: req.user.email });
+        return res.status(404).json({ msg: 'User not found' });
+      }
+
+      // Create a new Employee record if it doesn't exist
+      const employeeId = await generateEmployeeId();
+      employee = new Employee({
+        employeeId,
+        name: user.name || 'Test Employee', // Use name from User or default
+        email: user.email,
+        position: 'Employee', // Default position
+        salary: 50000, // Default salary
+      });
+
+      await employee.save();
+      console.log('Get current employee: Created new employee record', { email: req.user.email, employeeId });
     }
+
+    const profile = {
+      email: employee.email,
+      name: employee.name,
+      employeeId: employee.employeeId,
+      position: employee.position,
+      salary: employee.salary,
+      role: 'employee',
+    };
     console.log('Get current employee: Success', { email: req.user.email, name: employee.name });
-    res.json(employee);
+    res.json(profile);
   } catch (error) {
     console.error('Get current employee error:', { email: req.user.email, error: error.message });
     res.status(500).json({ msg: 'Server error: ' + error.message });
