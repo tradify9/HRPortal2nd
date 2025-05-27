@@ -1,59 +1,58 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const User = require('./models/User');
 const Employee = require('./models/Employee');
-const connectDB = require('./config/db');
-require('dotenv').config();
+const User = require('./models/User');
 
 const seed = async () => {
+  let connection;
   try {
-    await connectDB();
+    connection = await mongoose.connect('mongodb+srv://fintradify:mRU4GJ82NQLfXPRX@hrportal.8fwiltn.mongodb.net/?retryWrites=true&w=majority&appName=Hrportal', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+    });
+    console.log('Connected to MongoDB for seeding');
 
-    // Clear existing data
-    await User.deleteMany({});
-    await Employee.deleteMany({});
+    await mongoose.connection.dropDatabase();
+    console.log('Dropped hr-portal database to start fresh');
 
-    // Create admin user
-    const adminPassword = await bcrypt.hash('admin123', 10);
+    const hashedAdminPassword = await bcrypt.hash('admin123', 10);
     const adminUser = new User({
-      employeeId: 'ADMIN001',
-      password: adminPassword,
+      email: 'admin@gmail.com',
+      password: hashedAdminPassword,
       role: 'admin',
     });
     await adminUser.save();
+    console.log('Admin user seeded: admin@gmail.com');
 
-    const adminEmployee = new Employee({
-      employeeId: 'ADMIN001',
-      name: 'Admin User',
-      email: 'admin@example.com',
-      position: 'Administrator',
-      salary: 0,
-    });
-    await adminEmployee.save();
-
-    // Create test employee
-    const employeePassword = await bcrypt.hash('emp123', 10);
-    const testEmployeeUser = new User({
-      employeeId: 'EMP0001',
-      password: employeePassword,
-      role: 'employee',
-    });
-    await testEmployeeUser.save();
-
-    const testEmployee = new Employee({
+    const employee = new Employee({
       employeeId: 'EMP0001',
       name: 'Test Employee',
-      email: 'employee@example.com',
+      email: 'test.employee@gmail.com',
       position: 'Developer',
       salary: 50000,
     });
-    await testEmployee.save();
+    await employee.save();
+    console.log('Employee seeded: EMP0001');
 
-    console.log('Database seeded successfully with ADMIN001 (admin) and EMP0001 (employee)');
-    process.exit();
+    const employeeUser = new User({
+      email: 'test.employee@gmail.com',
+      role: 'employee',
+    });
+    await employeeUser.save();
+    console.log('Employee user seeded: test.employee@gmail.com');
+
+    console.log('Database seeded successfully');
   } catch (error) {
-    console.error('Seed error:', error.message);
-    process.exit(1);
+    console.error('Error seeding database:', error.message);
+    if (error.name === 'MongooseServerSelectionError') {
+      console.error('MongoDB server is not running. Please start MongoDB using "mongod" and try again.');
+    }
+  } finally {
+    if (connection) {
+      await mongoose.connection.close();
+      console.log('MongoDB connection closed');
+    }
   }
 };
 

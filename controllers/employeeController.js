@@ -2,7 +2,6 @@ const Employee = require('../models/Employee');
 const User = require('../models/User');
 const { sendEmail } = require('../utils/sendEmail');
 const { generateEmployeeId } = require('../utils/generateEmployeeId');
-const bcrypt = require('bcryptjs');
 const csv = require('csv-parser');
 const fs = require('fs');
 
@@ -15,6 +14,11 @@ exports.addEmployee = async (req, res) => {
       return res.status(400).json({ msg: 'All fields are required' });
     }
 
+    if (!email.endsWith('@gmail.com')) {
+      console.log('Add Employee: Not a Gmail address', { email });
+      return res.status(400).json({ msg: 'Please use a Gmail address' });
+    }
+
     let employee = await Employee.findOne({ email });
     if (employee) {
       console.log('Add Employee: Email already exists', { email });
@@ -22,8 +26,6 @@ exports.addEmployee = async (req, res) => {
     }
 
     const employeeId = await generateEmployeeId();
-    const password = Math.random().toString(36).slice(-8);
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     employee = new Employee({
       employeeId,
@@ -34,8 +36,7 @@ exports.addEmployee = async (req, res) => {
     });
 
     const user = new User({
-      employeeId,
-      password: hashedPassword,
+      email,
       role: 'employee',
     });
 
@@ -46,8 +47,8 @@ exports.addEmployee = async (req, res) => {
     try {
       await sendEmail(
         email,
-        'Welcome to Fintradify HR Portal',
-        `Your account has been created please login the link to used your employee id and password. Employee ID: ${employeeId}, Password: ${password}`
+        'Welcome to HR Portal',
+        `Your account has been created. Employee ID: ${employeeId}. You can log in using your email: ${email}.`
       );
       console.log('Add Employee: Welcome email sent', { email });
     } catch (emailError) {
@@ -83,6 +84,11 @@ exports.uploadEmployeesCSV = async (req, res) => {
           continue;
         }
 
+        if (!email.endsWith('@gmail.com')) {
+          errors.push(`Not a Gmail address: ${email}`);
+          continue;
+        }
+
         try {
           let employee = await Employee.findOne({ email });
           if (employee) {
@@ -91,8 +97,6 @@ exports.uploadEmployeesCSV = async (req, res) => {
           }
 
           const employeeId = await generateEmployeeId();
-          const password = Math.random().toString(36).slice(-8);
-          const hashedPassword = await bcrypt.hash(password, 10);
 
           employee = new Employee({
             employeeId,
@@ -103,8 +107,7 @@ exports.uploadEmployeesCSV = async (req, res) => {
           });
 
           const user = new User({
-            employeeId,
-            password: hashedPassword,
+            email,
             role: 'employee',
           });
 
@@ -116,7 +119,7 @@ exports.uploadEmployeesCSV = async (req, res) => {
             await sendEmail(
               email,
               'Welcome to HR Portal',
-              `Your account has been created. Employee ID: ${employeeId}, Password: ${password}`
+              `Your account has been created. Employee ID: ${employeeId}. You can log in using your email: ${email}.`
             );
           } catch (emailError) {
             console.log('Upload Employees CSV: Email sending failed', { email, error: emailError.message });
@@ -128,7 +131,7 @@ exports.uploadEmployeesCSV = async (req, res) => {
         }
       }
 
-      fs.unlinkSync(req.file.path); // Clean up
+      fs.unlinkSync(req.file.path);
       res.json({
         msg: `CSV processed. ${results.length - errors.length} employees added successfully.`,
         errors,
@@ -159,8 +162,8 @@ exports.deleteEmployee = async (req, res) => {
     }
 
     await Employee.findByIdAndDelete(req.params.id);
-    await User.findOneAndDelete({ employeeId: employee.employeeId });
-    console.log('Delete Employee: Employee deleted', { employeeId: employee.employeeId });
+    await User.findOneAndDelete({ email: employee.email });
+    console.log('Delete Employee: Employee deleted', { email: employee.email });
     res.json({ msg: 'Employee deleted successfully' });
   } catch (error) {
     console.error('Delete Employee error:', error.message);
@@ -175,7 +178,7 @@ exports.getEmployeeById = async (req, res) => {
       console.log('Get employee by ID: Not found', { id: req.params.id });
       return res.status(404).json({ msg: 'Employee not found' });
     }
-    console.log('Get employee by ID: Success', { id: req.params.id, employeeId: employee.employeeId });
+    console.log('Get employee by ID: Success', { id: req.params.id, email: employee.email });
     res.json(employee);
   } catch (error) {
     console.error('Get employee by ID error:', { id: req.params.id, error: error.message });
@@ -195,13 +198,17 @@ exports.updateEmployee = async (req, res) => {
       return res.status(400).json({ msg: 'All fields are required' });
     }
 
+    if (!email.endsWith('@gmail.com')) {
+      console.log('Update Employee: Not a Gmail address', { email });
+      return res.status(400).json({ msg: 'Please use a Gmail address' });
+    }
+
     const employee = await Employee.findById(req.params.id);
     if (!employee) {
       console.log('Update Employee: Employee not found', { id: req.params.id });
       return res.status(404).json({ msg: 'Employee not found' });
     }
 
-    // Check if email is changed and already exists for another employee
     if (email !== employee.email) {
       const existingEmployee = await Employee.findOne({ email });
       if (existingEmployee) {
@@ -216,13 +223,39 @@ exports.updateEmployee = async (req, res) => {
     employee.salary = parseFloat(salary);
 
     await employee.save();
-    console.log('Update Employee: Success', { id: req.params.id, employeeId: employee.employeeId });
+
+    // Update the email in the User collection if it has changed
+    if (email !== employee.email) {
+      await User.findOneAndUpdate(
+        { email: employee.email },
+        { email },
+        { new: true }
+      );
+    }
+
+    console.log('Update Employee: Success', { id: req.params.id, email: employee.email });
     res.json({ msg: 'Employee updated successfully', employee });
   } catch (error) {
     console.error('Update Employee error:', { id: req.params.id, error: error.message });
     if (error.kind === 'ObjectId') {
       return res.status(404).json({ msg: 'Employee not found' });
     }
+    res.status(500).json({ msg: 'Server error: ' + error.message });
+  }
+};
+
+exports.getCurrentEmployee = async (req, res) => {
+  try {
+    console.log('Get current employee: Attempting to fetch', { email: req.user.email });
+    const employee = await Employee.findOne({ email: req.user.email });
+    if (!employee) {
+      console.log('Get current employee: Not found', { email: req.user.email });
+      return res.status(404).json({ msg: 'Employee not found' });
+    }
+    console.log('Get current employee: Success', { email: req.user.email, name: employee.name });
+    res.json(employee);
+  } catch (error) {
+    console.error('Get current employee error:', { email: req.user.email, error: error.message });
     res.status(500).json({ msg: 'Server error: ' + error.message });
   }
 };
