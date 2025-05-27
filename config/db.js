@@ -1,17 +1,12 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
 
 const connectDB = async () => {
   try {
-    if (!process.env.MONGO_URI) {
-      throw new Error('MONGO_URI is not defined in .env file');
-    }
-    mongoose.set('strictQuery', true); // Suppress strictQuery warning
-    await mongoose.connect(process.env.MONGO_URI, {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://fintradify:mRU4GJ82NQLfXPRX@hrportal.8fwiltn.mongodb.net/?retryWrites=true&w=majority&appName=Hrportal', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log('MongoDB connected');
+    console.log('MongoDB connected to hr-portal');
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);

@@ -81,7 +81,31 @@ exports.getAllAttendance = async (req, res) => {
 
 exports.downloadAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find().sort({ date: -1 });
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      console.log('Download attendance: Missing date parameters');
+      return res.status(400).json({ msg: 'Start date and end date are required' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start) || isNaN(end)) {
+      console.log('Download attendance: Invalid date format');
+      return res.status(400).json({ msg: 'Invalid date format' });
+    }
+
+    if (start > end) {
+      console.log('Download attendance: Invalid date range');
+      return res.status(400).json({ msg: 'Start date must be before end date' });
+    }
+
+    const attendance = await Attendance.find({
+      date: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ date: -1 });
 
     if (!attendance.length) {
       console.log('Download attendance: No records found');
@@ -106,7 +130,7 @@ exports.downloadAttendance = async (req, res) => {
     const csv = json2csvParser.parse(attendance);
 
     res.header('Content-Type', 'text/csv');
-    res.attachment('attendance.csv');
+    res.attachment(`attendance_${startDate}_${endDate}.csv`);
     console.log('Download attendance: Success', { count: attendance.length });
     res.send(csv);
   } catch (error) {

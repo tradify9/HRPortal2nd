@@ -1,54 +1,83 @@
+const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
 
-exports.login = async (req, res) => {
+// Log to verify this file is loaded
+console.log('authController loaded');
+
+exports.adminLogin = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    if (!email) {
-      console.log('Login: Missing email');
-      return res.status(400).json({ msg: 'Please provide an email' });
-    }
+    const user = await User.findOne({ email }).lean();
+    console.log('Admin Login: Fetched user from DB', { email, user });
 
-    if (!email.endsWith('@gmail.com')) {
-      console.log('Login: Not a Gmail address', { email });
-      return res.status(400).json({ msg: 'Please use a Gmail address to login' });
-    }
-
-    const user = await User.findOne({ email });
     if (!user) {
-      console.log('Login: User not found', { email });
+      console.log('Admin Login: User not found', { email });
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
-    // For admins, require a password
-    if (user.role === 'admin') {
-      if (!password) {
-        console.log('Login: Password required for admin', { email });
-        return res.status(400).json({ msg: 'Password is required for admin login' });
-      }
-
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) {
-        console.log('Login: Password mismatch for admin', { email });
-        return res.status(400).json({ msg: 'Invalid credentials' });
-      }
+    if (!password) {
+      console.log('Admin Login: Password required', { email });
+      return res.status(400).json({ msg: 'Password is required for admin' });
     }
 
-    // For employees, no password is needed
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      console.log('Admin Login: Invalid password', { email });
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    }
+
     const payload = {
       user: {
         email: user.email,
-        role: user.role,
+        role: 'admin',
       },
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-    console.log('Login: Success', { email, role: user.role });
-    res.json({ token });
+    console.log('Admin Login: JWT Payload', payload);
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1h' });
+
+    const response = { token, email: user.email, role: 'admin' };
+    console.log('Admin Login: Sending response', response);
+
+    res.status(200).json(response);
   } catch (error) {
-    console.error('Login error:', { email, error: error.message });
+    console.error('Admin Login error:', error.message);
+    res.status(500).json({ msg: 'Server error: ' + error.message });
+  }
+};
+
+exports.employeeLogin = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email }).lean();
+    console.log('Employee Login: Fetched user from DB', { email, user });
+
+    if (!user) {
+      console.log('Employee Login: User not found', { email });
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    }
+
+    const payload = {
+      user: {
+        email: user.email,
+        role: 'employee',
+      },
+    };
+
+    console.log('Employee Login: JWT Payload', payload);
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1h' });
+
+    const response = { token, email: user.email, role: 'employee' };
+    console.log('Employee Login: Sending response', response);
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Employee Login error:', error.message);
     res.status(500).json({ msg: 'Server error: ' + error.message });
   }
 };

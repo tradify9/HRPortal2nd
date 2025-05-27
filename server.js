@@ -17,11 +17,13 @@ connectDB();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Request logging middleware
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
+// Route mounts
 app.use('/api/auth', authRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -29,6 +31,7 @@ app.use('/api/leave', leaveRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/task', taskRoutes);
 
+// Root route
 app.get('/', (req, res) => {
   res.status(200).send('Server is running');
 });
