@@ -46,8 +46,8 @@ exports.addEmployee = async (req, res) => {
     try {
       await sendEmail(
         email,
-        'Welcome to Fintradify HR Portal',
-        `Your account has been created please login the link to used your employee id and password. Employee ID: ${employeeId}, Password: ${password}`
+        'Welcome to HR Portal',
+        `Your account has been created. Employee ID: ${employeeId}, Password: ${password}`
       );
       console.log('Add Employee: Welcome email sent', { email });
     } catch (emailError) {
@@ -128,7 +128,7 @@ exports.uploadEmployeesCSV = async (req, res) => {
         }
       }
 
-      fs.unlinkSync(req.file.path); // Clean up
+      fs.unlinkSync(req.file.path);
       res.json({
         msg: `CSV processed. ${results.length - errors.length} employees added successfully.`,
         errors,
@@ -201,7 +201,6 @@ exports.updateEmployee = async (req, res) => {
       return res.status(404).json({ msg: 'Employee not found' });
     }
 
-    // Check if email is changed and already exists for another employee
     if (email !== employee.email) {
       const existingEmployee = await Employee.findOne({ email });
       if (existingEmployee) {
@@ -223,6 +222,22 @@ exports.updateEmployee = async (req, res) => {
     if (error.kind === 'ObjectId') {
       return res.status(404).json({ msg: 'Employee not found' });
     }
+    res.status(500).json({ msg: 'Server error: ' + error.message });
+  }
+};
+
+exports.getCurrentEmployee = async (req, res) => {
+  try {
+    console.log('Get current employee: Attempting to fetch', { employeeId: req.user.employeeId });
+    const employee = await Employee.findOne({ employeeId: req.user.employeeId });
+    if (!employee) {
+      console.log('Get current employee: Not found', { employeeId: req.user.employeeId });
+      return res.status(404).json({ msg: 'Employee not found' });
+    }
+    console.log('Get current employee: Success', { employeeId: req.user.employeeId, name: employee.name });
+    res.json(employee);
+  } catch (error) {
+    console.error('Get current employee error:', { employeeId: req.user.employeeId, error: error.message });
     res.status(500).json({ msg: 'Server error: ' + error.message });
   }
 };
